@@ -1,0 +1,82 @@
+services:
+  ollama-nothink-proxy:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    networks:
+      br1.224:
+        ipv4_address: 10.236.224.229
+    environment:
+      OLLAMA_HOST: "http://10.236.224.24:11434"
+      PROXY_PORT: "11435"
+    configs:
+      - source: proxy_script
+        target: /proxy.py
+    command: python3 /proxy.py
+
+configs:
+  proxy_script:
+    content: |
+      import http.server, urllib.request, urllib.error, json, os
+      OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://10.236.224.24:11434")
+      PROXY_PORT  = int(os.environ.get("PROXY_PORT", "11435"))
+      THINKING_ENDPOINTS = {"/api/chat", "/api/generate"}
+      class ProxyHandler(http.server.BaseHTTPRequestHandler):
+          def log_message(self, format, *args):
+              print(f"[proxy] {self.address_string()} - {format % args}")
+          def do_GET(self):
+              self._forward(body=None)
+          def do_POST(self):
+              length = int(self.headers.get("Content-Length", 0))
+              raw = self.rfile.read(length) if length else b""
+              if self.path in THINKING_ENDPOINTS and raw:
+                  try:
+                      payload = json.loads(raw)
+                      payload["think"] = False
+                      raw = json.dumps(payload).encode()
+                      print(f"[proxy] injected think=false into {self.path}")
+                  except json.JSONDecodeError:
+                      pass
+              self._forward(body=raw)
+          def _forward(self, body):
+              url = OLLAMA_HOST.rstrip("/") + self.path
+              headers = {}
+              for key, value in self.headers.items():
+                  if key.lower() not in ("host", "transfer-encoding", "connection", "keep-alive", "proxy-connection", "content-length"):
+                      headers[key] = value
+              if body is not None:
+                  headers["Content-Length"] = str(len(body))
+              req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      self.send_response(resp.status)
+                      for key, value in resp.headers.items():
+                          if key.lower() not in ("transfer-encoding", "connection"):
+                              self.send_header(key, value)
+                      self.end_headers()
+                      while True:
+                          chunk = resp.read(4096)
+                          if not chunk:
+                              break
+                          self.wfile.write(chunk)
+                          self.wfile.flush()
+              except urllib.error.HTTPError as e:
+                  self.send_response(e.code)
+                  for key, value in e.headers.items():
+                      if key.lower() not in ("transfer-encoding", "connection"):
+                          self.send_header(key, value)
+                  self.end_headers()
+                  self.wfile.write(e.read())
+              except urllib.error.URLError as e:
+                  print(f"[proxy] upstream error: {e.reason}")
+                  self.send_response(502)
+                  self.end_headers()
+                  self.wfile.write(b"Proxy upstream error")
+      server = http.server.ThreadingHTTPServer(("0.0.0.0", PROXY_PORT), ProxyHandler)
+      print(f"[proxy] listening on 0.0.0.0:{PROXY_PORT}")
+      print(f"[proxy] forwarding to {OLLAMA_HOST}")
+      print(f"[proxy] injecting think=false on {THINKING_ENDPOINTS}")
+      server.serve_forever()
+
+networks:
+  br1.224:
+    external: true
