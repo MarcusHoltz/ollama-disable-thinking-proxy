@@ -2,6 +2,13 @@
 
 A Docker sidecar that disables thinking mode for Qwen3 models in Ollama.
 
+* * *
+
+![Secret Underground Ollama Base where science has gone mad making a nothink proxy](https://raw.githubusercontent.com/MarcusHoltz/marcusholtz.github.io/refs/heads/main/assets/img/header/header--llmai--ollama-nothink-proxy.jpg "Ollama Nothink Proxy underground base")
+
+* * *
+
+
 ## Why this exists
 
 The obvious solutions **do not work**:
