@@ -44,6 +44,16 @@ Sits between Zed (or any client) and Ollama. Intercepts every `/api/chat` and `/
 | `OLLAMA_HOST` | `http://10.236.224.24:11434` | Upstream Ollama address |
 | `PROXY_PORT` | `11435` | Port the proxy listens on |
 
+
+* * *
+
+## Generate the new model in ollama
+
+```bash
+ollama create q35:latest -f ./Modelfile
+```
+
+* * *
 ## Requirements
 
 - Docker Compose v2.23.0+ (required for `configs.content`)
